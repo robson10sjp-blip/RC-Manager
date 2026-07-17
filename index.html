@@ -98,17 +98,51 @@
 
       <section id="productsView" class="hidden">
         <div class="top"><h1>Estoque</h1><button id="showProductFormBtn" class="primary">+ Peça</button></div>
-        <div id="productForm" class="card hidden">
-          <h2>Nova peça</h2>
-          <label>Nome<input id="productName"></label>
-          <label>Categoria<input id="productCategory"></label>
-          <label>Tamanho<input id="productSize"></label>
-          <label>Preço de venda<input id="productPrice" type="number" step="0.01"></label>
-          <label>Quantidade<input id="productStock" type="number" min="0"></label>
-          <button id="saveProductBtn" class="primary full">Salvar na nuvem</button>
+
+        <input id="productSearch" class="search" placeholder="Buscar por nome, categoria, cor, tamanho ou código">
+
+        <div class="grid" style="margin-bottom:16px">
+          <div class="metric"><span>Total de peças</span><strong id="productsTotalUnits">0</strong></div>
+          <div class="metric"><span>Produtos cadastrados</span><strong id="productsCount">0</strong></div>
+          <div class="metric"><span>Estoque baixo</span><strong id="lowStockCount" class="error">0</strong></div>
+          <div class="metric"><span>Valor estimado de venda</span><strong id="stockSaleValue">R$ 0,00</strong></div>
         </div>
+
+        <div id="productForm" class="card hidden">
+          <h2 id="productFormTitle">Nova peça</h2>
+          <input id="productId" type="hidden">
+
+          <label>Código do produto<input id="productCode" placeholder="Ex.: VEST-G-PRETO"></label>
+          <label>Nome da peça<input id="productName" placeholder="Ex.: Vestido canelado"></label>
+          <label>Categoria<input id="productCategory" placeholder="Ex.: Vestido"></label>
+          <label>Tamanho<input id="productSize" placeholder="Ex.: G ou 42"></label>
+          <label>Cor<input id="productColor" placeholder="Ex.: Preto"></label>
+          <label>Preço de custo<input id="productCost" type="number" min="0" step="0.01"></label>
+          <label>Preço de venda<input id="productPrice" type="number" min="0" step="0.01"></label>
+          <label>Quantidade atual<input id="productStock" type="number" min="0"></label>
+          <label>Alerta de estoque baixo<input id="productMinStock" type="number" min="0" value="3"></label>
+          <label>Foto da peça (link opcional)<input id="productPhotoUrl" type="url" placeholder="https://..."></label>
+          <label>Observações<textarea id="productNotes" placeholder="Fornecedor, coleção, detalhes..."></textarea></label>
+
+          <button id="saveProductBtn" class="primary full">Salvar na nuvem</button>
+          <button id="cancelProductBtn" class="secondary full" style="margin-top:9px">Cancelar</button>
+        </div>
+
         <div id="productsList" class="list"></div>
       </section>
+
+      <div id="productModal" class="modal hidden">
+        <div class="modal-card">
+          <div class="modal-head"><h2 id="productModalName">Produto</h2><button id="closeProductModalBtn" class="close">×</button></div>
+          <div id="productModalPhoto" style="margin:12px 0"></div>
+          <div id="productModalContent" class="profile-grid"></div>
+          <div class="item-actions" style="margin-top:16px">
+            <button id="productAddStockBtn" class="secondary">+ Entrada</button>
+            <button id="productRemoveStockBtn" class="secondary">− Saída</button>
+            <button id="productEditBtn" class="primary">Editar</button>
+          </div>
+        </div>
+      </div>
 
       <nav class="nav">
         <button class="active" data-view="homeView">🏠<br>Início</button>
@@ -138,7 +172,7 @@
     const CONFIG_KEY="rc_firebase_config_v1";
     const $=id=>document.getElementById(id);
     const show=id=>{["setupScreen","authScreen","appScreen"].forEach(x=>$(x).classList.add("hidden"));$(id).classList.remove("hidden")};
-    let auth,db,currentUser,unsubs=[],allClients=[],selectedClient=null;
+    let auth,db,currentUser,unsubs=[],allClients=[],selectedClient=null,allProducts=[],selectedProduct=null;
 
     function userCollection(name){return collection(db,"users",currentUser.uid,name)}
     function userDoc(name,id){return doc(db,"users",currentUser.uid,name,id)}
@@ -244,12 +278,135 @@
     $("profileEditBtn").onclick=()=>{if(selectedClient){$("clientProfileModal").classList.add("hidden");editClient(selectedClient)}};
     $("profileWhatsappBtn").onclick=()=>{if(!selectedClient)return;const p=(selectedClient.phone||"").replace(/\D/g,"");if(!p)return alert("Cadastre o telefone.");window.open(`https://wa.me/55${p}`,"_blank")};
 
-    $("showProductFormBtn").onclick=()=>$("productForm").classList.toggle("hidden");
+    function resetProductForm(){
+      ["productId","productCode","productName","productCategory","productSize","productColor","productCost","productPrice","productStock","productMinStock","productPhotoUrl","productNotes"].forEach(id=>$(id).value="");
+      $("productMinStock").value="3";
+      $("productFormTitle").textContent="Nova peça";
+      $("productForm").classList.add("hidden");
+    }
+
+    $("showProductFormBtn").onclick=()=>{resetProductForm();$("productForm").classList.remove("hidden")};
+    $("cancelProductBtn").onclick=resetProductForm;
+    $("productSearch").oninput=renderProducts;
+
     $("saveProductBtn").onclick=async()=>{
-      if(!$("productName").value.trim())return alert("Informe o nome da peça.");
-      await addDoc(userCollection("products"),{name:$("productName").value.trim(),category:$("productCategory").value.trim(),size:$("productSize").value.trim(),price:Number($("productPrice").value||0),stock:Number($("productStock").value||0),createdAt:serverTimestamp()});
-      ["productName","productCategory","productSize","productPrice","productStock"].forEach(id=>$(id).value="");$("productForm").classList.add("hidden");
+      const name=$("productName").value.trim();
+      if(!name)return alert("Informe o nome da peça.");
+
+      const data={
+        code:$("productCode").value.trim(),
+        name,
+        category:$("productCategory").value.trim(),
+        size:$("productSize").value.trim(),
+        color:$("productColor").value.trim(),
+        cost:Number($("productCost").value||0),
+        price:Number($("productPrice").value||0),
+        stock:Number($("productStock").value||0),
+        minStock:Number($("productMinStock").value||0),
+        photoUrl:$("productPhotoUrl").value.trim(),
+        notes:$("productNotes").value.trim(),
+        updatedAt:serverTimestamp()
+      };
+
+      const id=$("productId").value;
+      if(id)await updateDoc(userDoc("products",id),data);
+      else await addDoc(userCollection("products"),{...data,createdAt:serverTimestamp()});
+
+      resetProductForm();
     };
+
+    function renderProducts(){
+      const term=normalize($("productSearch").value);
+      const rows=allProducts.filter(p=>normalize([p.code,p.name,p.category,p.size,p.color].join(" ")).includes(term));
+
+      $("productsList").innerHTML=rows.length?rows.map(p=>{
+        const low=Number(p.stock||0)<=Number(p.minStock||0);
+        const thumb=p.photoUrl?`<img src="${escapeHtml(p.photoUrl)}" alt="" style="width:58px;height:58px;object-fit:cover;border-radius:12px;border:1px solid #333">`:"";
+        return `<div class="item">
+          <div style="display:flex;gap:12px;align-items:center">
+            ${thumb}
+            <div>
+              <strong>${escapeHtml(p.name)}</strong>
+              <small>${escapeHtml(p.code||"Sem código")} • ${escapeHtml(p.category||"Sem categoria")}</small>
+              <small>Cor ${escapeHtml(p.color||"-")} • Tam. ${escapeHtml(p.size||"-")} • ${money(p.price)}</small>
+              <small class="${low?"error":""}">${Number(p.stock||0)} un.${low?" • ESTOQUE BAIXO":""}</small>
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="secondary" data-product-action="view" data-id="${p.id}">Detalhes</button>
+            <button class="primary" data-product-action="edit" data-id="${p.id}">Editar</button>
+            <button class="danger" data-product-action="delete" data-id="${p.id}">Excluir</button>
+          </div>
+        </div>`;
+      }).join(""):'<div class="card empty">Nenhum produto encontrado.</div>';
+    }
+
+    $("productsList").onclick=async e=>{
+      const btn=e.target.closest("[data-product-action]");if(!btn)return;
+      const p=allProducts.find(x=>x.id===btn.dataset.id);if(!p)return;
+
+      if(btn.dataset.productAction==="view")openProductModal(p);
+      if(btn.dataset.productAction==="edit")editProduct(p);
+      if(btn.dataset.productAction==="delete"&&confirm(`Excluir ${p.name}?`)){
+        await deleteDoc(userDoc("products",p.id));
+      }
+    };
+
+    function editProduct(p){
+      $("productId").value=p.id;
+      $("productCode").value=p.code||"";
+      $("productName").value=p.name||"";
+      $("productCategory").value=p.category||"";
+      $("productSize").value=p.size||"";
+      $("productColor").value=p.color||"";
+      $("productCost").value=p.cost||0;
+      $("productPrice").value=p.price||0;
+      $("productStock").value=p.stock||0;
+      $("productMinStock").value=p.minStock??3;
+      $("productPhotoUrl").value=p.photoUrl||"";
+      $("productNotes").value=p.notes||"";
+      $("productFormTitle").textContent="Editar peça";
+      $("productForm").classList.remove("hidden");
+      $("productForm").scrollIntoView({behavior:"smooth"});
+    }
+
+    function openProductModal(p){
+      selectedProduct=p;
+      $("productModalName").textContent=p.name;
+      $("productModalPhoto").innerHTML=p.photoUrl?`<img src="${escapeHtml(p.photoUrl)}" alt="${escapeHtml(p.name)}" style="width:100%;max-height:280px;object-fit:cover;border-radius:16px;border:1px solid #333">`:"";
+      const low=Number(p.stock||0)<=Number(p.minStock||0);
+      $("productModalContent").innerHTML=`
+        <div class="profile-box"><span>Código</span><strong>${escapeHtml(p.code||"Não informado")}</strong></div>
+        <div class="profile-box"><span>Categoria</span><strong>${escapeHtml(p.category||"Não informada")}</strong></div>
+        <div class="profile-box"><span>Tamanho</span><strong>${escapeHtml(p.size||"Não informado")}</strong></div>
+        <div class="profile-box"><span>Cor</span><strong>${escapeHtml(p.color||"Não informada")}</strong></div>
+        <div class="profile-box"><span>Preço de custo</span><strong>${money(p.cost)}</strong></div>
+        <div class="profile-box"><span>Preço de venda</span><strong>${money(p.price)}</strong></div>
+        <div class="profile-box"><span>Quantidade</span><strong class="${low?"error":""}">${Number(p.stock||0)} un.</strong></div>
+        <div class="profile-box"><span>Alerta abaixo de</span><strong>${Number(p.minStock||0)} un.</strong></div>
+        <div class="profile-box" style="grid-column:1/-1"><span>Observações</span><strong>${escapeHtml(p.notes||"Nenhuma")}</strong></div>`;
+      $("productModal").classList.remove("hidden");
+    }
+
+    $("closeProductModalBtn").onclick=()=>$("productModal").classList.add("hidden");
+    $("productEditBtn").onclick=()=>{if(selectedProduct){$("productModal").classList.add("hidden");editProduct(selectedProduct)}};
+
+    async function moveStock(direction){
+      if(!selectedProduct)return;
+      const label=direction>0?"entrada":"saída";
+      const raw=prompt(`Quantidade da ${label}:`);
+      if(raw===null)return;
+      const qty=Number(raw);
+      if(!Number.isFinite(qty)||qty<=0)return alert("Informe uma quantidade válida.");
+      const current=Number(selectedProduct.stock||0);
+      const next=direction>0?current+qty:current-qty;
+      if(next<0)return alert("A saída não pode deixar o estoque negativo.");
+      await updateDoc(userDoc("products",selectedProduct.id),{stock:next,updatedAt:serverTimestamp()});
+      $("productModal").classList.add("hidden");
+    }
+
+    $("productAddStockBtn").onclick=()=>moveStock(1);
+    $("productRemoveStockBtn").onclick=()=>moveStock(-1);
 
     document.querySelectorAll(".nav button").forEach(btn=>btn.onclick=()=>{
       ["homeView","clientsView","productsView"].forEach(v=>$(v).classList.add("hidden"));$(btn.dataset.view).classList.remove("hidden");
@@ -261,7 +418,18 @@
         allClients=snap.docs.map(d=>({id:d.id,...d.data()}));$("clientsCount").textContent=allClients.length;renderClients();
       }));
       unsubs.push(onSnapshot(query(userCollection("products"),orderBy("createdAt","desc")),snap=>{
-        const rows=snap.docs.map(d=>({id:d.id,...d.data()}));$("stockCount").textContent=rows.reduce((a,x)=>a+Number(x.stock||0),0);
+        allProducts=snap.docs.map(d=>({id:d.id,...d.data()}));
+        const totalUnits=allProducts.reduce((a,p)=>a+Number(p.stock||0),0);
+        const lowCount=allProducts.filter(p=>Number(p.stock||0)<=Number(p.minStock||0)).length;
+        const saleValue=allProducts.reduce((a,p)=>a+(Number(p.stock||0)*Number(p.price||0)),0);
+
+        $("stockCount").textContent=totalUnits;
+        $("productsTotalUnits").textContent=totalUnits;
+        $("productsCount").textContent=allProducts.length;
+        $("lowStockCount").textContent=lowCount;
+        $("stockSaleValue").textContent=money(saleValue);
+        renderProducts();
+      }));$("stockCount").textContent=rows.reduce((a,x)=>a+Number(x.stock||0),0);
         $("productsList").innerHTML=rows.length?rows.map(x=>`<div class="item"><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.category||"Sem categoria")} • Tam. ${escapeHtml(x.size||"-")} • ${money(x.price)}</small></div><span class="status">${Number(x.stock||0)} un.</span></div>`).join(""):'<div class="card empty">Nenhuma peça cadastrada.</div>';
       }));
     }
