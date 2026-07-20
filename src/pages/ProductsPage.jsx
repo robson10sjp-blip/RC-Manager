@@ -172,7 +172,7 @@ export default function ProductsPage() {
     }
   };
 
-const handleEdit = (product) => {
+   const handleEdit = (product) => {
   setEditingId(product.id);
 
   setForm({
@@ -193,6 +193,19 @@ const handleEdit = (product) => {
   setTimeout(() => {
     const formElement = document.querySelector('.product-form-card');
 
+    if (formElement) {
+      formElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    } else {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+  }, 100);
+};
     if (formElement) {
       formElement.scrollIntoView({
         behavior: 'smooth',
