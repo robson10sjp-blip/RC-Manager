@@ -172,22 +172,41 @@ export default function ProductsPage() {
     }
   };
 
-  const handleEdit = (product) => {
-    setEditingId(product.id);
-    setForm({
-      code: product.code,
-      description: product.description,
-      category: product.category,
-      size: product.size,
-      color: product.color,
-      costPrice: product.costPrice,
-      salePrice: product.salePrice,
-      stockQuantity: product.stockQuantity,
-      minStock: product.minStock
-    });
-    setError(null);
-    setMessage(null);
-  };
+const handleEdit = (product) => {
+  setEditingId(product.id);
+
+  setForm({
+    code: product.code || '',
+    description: product.description || '',
+    category: product.category || 'masculino',
+    size: product.size || '',
+    color: product.color || '',
+    costPrice: Number(product.costPrice || 0),
+    salePrice: Number(product.salePrice || 0),
+    stockQuantity: Number(product.stockQuantity || 0),
+    minStock: Number(product.minStock || 0)
+  });
+
+  setError(null);
+  setMessage('Produto carregado para edição.');
+
+  setTimeout(() => {
+    const formElement = document.querySelector('.product-form-card');
+
+    if (formElement) {
+      formElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    } else {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+  }, 100);
+};
+  
 
   const handleDelete = async (product) => {
     if (!window.confirm(`Deseja excluir o produto ${product.code} - ${product.description}?`)) {
