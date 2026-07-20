@@ -27,22 +27,13 @@ const ProductModule: React.FC = () => {
   };
 
   const handleEdit = (product: any) => {
-  setSelectedProduct({ ...product });
+  setSelectedProduct(product);
 
   setTimeout(() => {
-    const formElement = document.querySelector('.product-module form');
-
-    if (formElement) {
-      formElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    } else {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    }
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
   }, 100);
 };
 
