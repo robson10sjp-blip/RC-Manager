@@ -172,7 +172,7 @@ export default function ProductsPage() {
     }
   };
 
-   const handleEdit = (product) => {
+   const handleEdit = (product) => {alert('Botão Editar funcionando!');
   setEditingId(product.id);
 
   setForm({
