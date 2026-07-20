@@ -206,19 +206,6 @@ export default function ProductsPage() {
     }
   }, 100);
 };
-    if (formElement) {
-      formElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    } else {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    }
-  }, 100);
-};
   
 
   const handleDelete = async (product) => {
